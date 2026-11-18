@@ -1,0 +1,61 @@
+# Fetch the timetable from Bullet's API (scripts/fetch_timetable.py) for every tool.
+# Started by hand: GitHub → Actions → "Fetch timetable from Bullet" → Run workflow.
+# Mode "check" only reports; mode "save" commits data/timetable.json, published by GitHub Pages.
+# The Bullet ID and secret are secrets (BULLET_CLIENT_ID, BULLET_CLIENT_SECRET): repository
+# secrets, or organization secrets shared with this repository.
+name: Fetch timetable from Bullet
+
+on:
+  workflow_dispatch:
+    inputs:
+      semester:
+        description: 'Semester (1 = S1, T1, T2 · 2 = S2, T3, T4)'
+        type: choice
+        options: ['1', '2']
+        default: '1'
+      academic_year:
+        description: 'First year of the academic year, e.g. 2026 for 2026/27 (leave empty for the current one)'
+        type: string
+        required: false
+      mode:
+        description: 'What to do'
+        type: choice
+        options: ['check', 'save']
+        default: 'check'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: fetch-timetable
+  cancel-in-progress: false
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch from Bullet
+        env:
+          BULLET_CLIENT_ID: ${{ secrets.BULLET_CLIENT_ID }}
+          BULLET_CLIENT_SECRET: ${{ secrets.BULLET_CLIENT_SECRET }}
+          SEMESTER: ${{ inputs.semester }}
+          ACADEMIC_YEAR: ${{ inputs.academic_year }}
+          MODE: ${{ inputs.mode }}
+        run: python3 scripts/fetch_timetable.py
+
+      - name: Save the fetch
+        if: inputs.mode == 'save'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data
+          if git diff --cached --quiet; then
+            echo "Nothing changed since the last fetch."
+          else
+            git commit -m "Fetch Bullet timetable: semester ${{ inputs.semester }}"
+            git pull --rebase origin "${GITHUB_REF_NAME}"
+            git push
+          fi
