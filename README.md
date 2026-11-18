@@ -47,9 +47,14 @@ The repository and the file are public, so:
 1. On GitHub, create the repository **`bullet-timetable`** in the `catolica-lisbon-sbe`
    organization and push this folder to it.
 2. Add the secrets **`BULLET_CLIENT_ID`** and **`BULLET_CLIENT_SECRET`** (the same read-only
-   Bullet client as the other tools): *Settings › Secrets and variables › Actions*. Tip: set them
-   once as **organization** secrets and share them with every repository that fetches from Bullet.
+   Bullet client as the other tools): *Settings › Secrets and variables › Actions › New repository
+   secret*. (Organization secrets would let several repositories share them, but need an
+   organization admin.)
 3. Turn on GitHub Pages: *Settings › Pages › Deploy from a branch › main / (root)*.
+
+Done on 18/11/2026: repository created and pushed by the **RitaQuintela** account (the one used for
+the other tools), repository secrets added, Pages on, first `save` run published 838 classes of
+Semester 1 2026/27.
 
 ## Fetching
 
@@ -57,8 +62,11 @@ The repository and the file are public, so:
 - **semester** 1 or 2, **academic year** (empty = current; switches on 1 May),
 - **mode** `check` first (summary only), then `save`.
 
-On the first `check`, read the *Professors (coded)* section of the summary. If no professor was
-found, it lists Bullet's staff-like field names: add the right one to `PROFESSOR_FIELDS` in
+Professors come from Bullet's `teacherName` field (confirmed on the first `check`: 836 of 838
+classes with a professor, 162 different professors). Bullet also sends `teacherAcronym`,
+`teacherCode`, `teacherCategoryName`, `teacherLabourContractName` and
+`teacherScientificAreaName`; none of them is published. If a later `check` finds no professor,
+the summary lists Bullet's staff-like field names: add the right one to `PROFESSOR_FIELDS` in
 `scripts/fetch_timetable.py`.
 
 ## Files
