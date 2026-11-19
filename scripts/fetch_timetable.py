@@ -325,19 +325,22 @@ def main():
 
         units, coder = UNITS[semester], Coder()
         other_sem = UNITS['2' if semester == '1' else '1']
-        rows, other_types, other_sem_rows, bad_units = [], [], [], []
+        rows, other_types, other_sem_rows, bad_units, no_course = [], [], [], [], []
         for raw in raw_rows:
             level = level_of(raw)
             if not level:
                 other_types.append(pick(raw, ['eventTypeName']))
                 continue
             row = convert(raw, level, coder)
+            if not row['ModuleName'] and not row['ModuleCode']:   # typed as a class, but no course in Bullet
+                no_course.append(dict(row, _title=pick(raw, ['eventName', 'eventTitle'])))
+                continue
             unit = row['Unit'].strip().upper()
             if unit in other_sem:                      # the other semester's classes (overlapping dates)
                 other_sem_rows.append(unit)
                 continue
             if unit not in units:                      # a mistake in Bullet: wrong or empty Unit
-                bad_units.append(dict(row, _title=pick(raw, ['eventName', 'eventTitle']), _date=row['Week']))
+                bad_units.append(row)
                 continue
             row['Unit'] = unit
             rows.append(row)
@@ -345,6 +348,10 @@ def main():
         report.append(f'- Skipped, not "Aula Licenciatura" / "Aula Mestrado": {len(other_types)}'
                       + (f' – {counted(other_types)}' if other_types else ''))
         report.append(f'- Skipped, classes of the other semester ({"/".join(other_sem)}): {len(other_sem_rows)}')
+        def line(r, what):
+            wk = r['Week'].split(',')
+            return (f"  - {what} · {r['EventType']} · {r['Classroom'] or 'no room'} · {r['WeekdayName']} "
+                    f"{r['StartTime']}–{r['EndTime']} · weeks {wk[0]}{f' … {wk[-1]} ({len(wk)})' if len(wk) > 1 else ''}")
         bad = merge_weeks(bad_units) if bad_units else []
         bad_count = {}
         for r in bad:
@@ -353,13 +360,26 @@ def main():
             report += ['', f'### ⚠ {len(bad)} classes left out: Unit is not {"/".join(units)}',
                        f'- Units found: {", ".join(f"{k} ({v})" for k, v in sorted(bad_count.items()))}',
                        '- Fix the Unit of these classes in Bullet, then run this again:']
-            for r in sorted(bad, key=lambda r: (r['ModuleName'], r.get('_title', ''), r['Week']))[:200]:
-                what = f"{r['ModuleName']} ({r['ModuleCode']}) – {r['SectionName'] or '–'}" if r['ModuleName'] else f"(no course) “{r.get('_title') or '–'}”"
-                wk = r['Week'].split(',')
-                report.append(f"  - {what} · {r['EventType']} · {r['Classroom'] or 'no room'} · {r['WeekdayName']} "
-                              f"{r['StartTime']}–{r['EndTime']} · weeks {wk[0]}{f' … {wk[-1]} ({len(wk)})' if len(wk) > 1 else ''} · Unit: {r['Unit'] or '(empty)'}")
+            for r in sorted(bad, key=lambda r: (r['ModuleName'], r['SectionName'], r['Week']))[:200]:
+                report.append(line(r, f"{r['ModuleName']} ({r['ModuleCode']}) – {r['SectionName'] or '–'}") + f" · Unit: {r['Unit'] or '(empty)'}")
             if len(bad) > 200:
                 report.append(f'  - … and {len(bad) - 200} more')
+        if no_course:                                  # not an alert: listed so they can be tidied up in Bullet
+            nc = {}
+            for r in no_course:                        # one line per title, room and time (weeks merged)
+                k = (r['_title'], r['EventType'], r['Classroom'], r['WeekdayName'], r['StartTime'], r['EndTime'])
+                nc.setdefault(k, dict(r, _weeks=set()))['_weeks'].add(r['Week'])
+            items = []
+            for r in nc.values():
+                r['Week'] = ','.join(sorted(r.pop('_weeks') - {''}))
+                items.append(r)
+            items.sort(key=lambda r: (r['EventType'] != 'Aula Licenciatura', r['_title'], r['Week']))
+            report += ['', f'### {len(items)} entries typed as a class but with no course in Bullet (not used, no alert)',
+                       '- No student can be matched to them. Undergraduate ones (first) should be linked to their '
+                       'course, shift and Unit in Bullet; the others are usually postgraduate programmes, exams or room bookings.']
+            report += [line(r, f"“{r['_title'] or '–'}”") for r in items[:200]]
+            if len(items) > 200:
+                report.append(f'  - … and {len(items) - 200} more')
         fetched = dt.datetime.now(dt.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
         merged = merge_weeks(rows)
         with_prof = sum(1 for r in merged if r['Professor'])

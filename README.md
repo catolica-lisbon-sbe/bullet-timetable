@@ -45,6 +45,10 @@ can move to it later and drop their own copies of the fetch.
   (empty, "T 3"…) is a mistake in Bullet: those classes are left out, counted in
   `unexpectedUnits`, and listed by course, shift and time under a ⚠ heading in the run's summary.
   The tools show the same warning. Fix the Unit in Bullet and save again.
+- **No course**: entries typed as *Aula Licenciatura* / *Aula Mestrado* but with no course in
+  Bullet (postgraduate programmes such as PGGL or MGA, exams, thesis defences, room bookings…) are
+  not used and raise no alert. The summary lists them, undergraduate ones first, so they can be
+  linked to their course or given the right event type in Bullet.
 
 ## Privacy
 
