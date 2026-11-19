@@ -337,7 +337,7 @@ def main():
                 other_sem_rows.append(unit)
                 continue
             if unit not in units:                      # a mistake in Bullet: wrong or empty Unit
-                bad_units.append(row)
+                bad_units.append(dict(row, _title=pick(raw, ['eventName', 'eventTitle']), _date=row['Week']))
                 continue
             row['Unit'] = unit
             rows.append(row)
@@ -353,11 +353,13 @@ def main():
             report += ['', f'### ⚠ {len(bad)} classes left out: Unit is not {"/".join(units)}',
                        f'- Units found: {", ".join(f"{k} ({v})" for k, v in sorted(bad_count.items()))}',
                        '- Fix the Unit of these classes in Bullet, then run this again:']
-            for r in sorted(bad, key=lambda r: (r['ModuleName'], r['SectionName']))[:30]:
-                report.append(f"  - {r['ModuleName']} ({r['ModuleCode']}) – {r['SectionName'] or '–'} · "
-                              f"{r['WeekdayName']} {r['StartTime']} · Unit: {r['Unit'] or '(empty)'}")
-            if len(bad) > 30:
-                report.append(f'  - … and {len(bad) - 30} more')
+            for r in sorted(bad, key=lambda r: (r['ModuleName'], r.get('_title', ''), r['Week']))[:200]:
+                what = f"{r['ModuleName']} ({r['ModuleCode']}) – {r['SectionName'] or '–'}" if r['ModuleName'] else f"(no course) “{r.get('_title') or '–'}”"
+                wk = r['Week'].split(',')
+                report.append(f"  - {what} · {r['EventType']} · {r['Classroom'] or 'no room'} · {r['WeekdayName']} "
+                              f"{r['StartTime']}–{r['EndTime']} · weeks {wk[0]}{f' … {wk[-1]} ({len(wk)})' if len(wk) > 1 else ''} · Unit: {r['Unit'] or '(empty)'}")
+            if len(bad) > 200:
+                report.append(f'  - … and {len(bad) - 200} more')
         fetched = dt.datetime.now(dt.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
         merged = merge_weeks(rows)
         with_prof = sum(1 for r in merged if r['Professor'])
