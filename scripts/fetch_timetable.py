@@ -275,6 +275,16 @@ def convert(raw, level, coder):
     return {c: row[c] for c in COLUMNS}
 
 
+def booking(raw):
+    """(room, date, start, end) of any Bullet event with a room and a date: only when the room is busy,
+    nothing about what the event is (no title, no people)."""
+    room, day = pick(raw, FIELDS['Classroom']), to_date(pick(raw, ['eventDateOccurrence']))
+    start, end = to_time(pick(raw, ['eventStartTime'])), to_time(pick(raw, ['eventEndTime']))
+    if not room or not day or not re.match(r'\d\d:\d\d$', start) or not re.match(r'\d\d:\d\d$', end) or end <= start:
+        return []
+    return [(r.strip(), day.isoformat(), start, end) for r in re.split(r'[;|]', room) if r.strip()]
+
+
 def merge_weeks(rows):
     """One row per class slot, listing all its weeks (like Bullet's export)."""
     merged = {}
@@ -326,21 +336,31 @@ def main():
         units, coder = UNITS[semester], Coder()
         other_sem = UNITS['2' if semester == '1' else '1']
         rows, other_types, other_sem_rows, bad_units, no_course = [], [], [], [], []
+        busy, busy_types = set(), []                   # rooms taken by everything that is not a class used by the tools
+        def taken(raw, kind):
+            b = booking(raw)
+            if b:
+                busy.update(b)
+                busy_types.append(kind)
         for raw in raw_rows:
             level = level_of(raw)
             if not level:
                 other_types.append(pick(raw, ['eventTypeName']))
+                taken(raw, pick(raw, ['eventTypeName']))
                 continue
             row = convert(raw, level, coder)
             if not row['ModuleName'] and not row['ModuleCode']:   # typed as a class, but no course in Bullet
                 no_course.append(dict(row, _title=pick(raw, ['eventName', 'eventTitle'])))
+                taken(raw, f'{level} (no course)')
                 continue
             unit = row['Unit'].strip().upper()
             if unit in other_sem:                      # the other semester's classes (overlapping dates)
                 other_sem_rows.append(unit)
+                taken(raw, f'{level} (other semester)')
                 continue
             if unit not in units:                      # a mistake in Bullet: wrong or empty Unit
                 bad_units.append(row)
+                taken(raw, f'{level} (wrong Unit)')
                 continue
             row['Unit'] = unit
             rows.append(row)
@@ -392,6 +412,9 @@ def main():
                    f'- Classrooms (sample): {counted((r["Classroom"] for r in merged), 8)}',
                    f'- Without a room: {sum(1 for r in merged if not r["Classroom"])}',
                    f'- Missing week: {sum(1 for r in merged if not r["Week"])}',
+                   '', '### Other room bookings (rooms shown as busy in the tools)',
+                   f'- Bookings: {len(busy)} (room, date and time only), in {len({b[0] for b in busy})} rooms',
+                   f'- From: {counted(busy_types)}',
                    '', '### Professors (coded)',
                    f'- Classes with a professor: {with_prof} of {len(merged)}',
                    f'- Different professors: {len(coder.codes)}',
@@ -409,7 +432,8 @@ def main():
             out = {'source': f'Bullet API · {label}', 'fetchedAt': fetched, 'semester': int(semester),
                    'academicYear': f'{year}/{year + 1}', 'units': list(units), 'firstDate': first, 'lastDate': last,
                    'unexpectedUnits': bad_count, 'professors': 'coded (new codes on every fetch)',
-                   'columns': COLUMNS, 'rows': [[r[c] for c in COLUMNS] for r in merged]}
+                   'columns': COLUMNS, 'rows': [[r[c] for c in COLUMNS] for r in merged],
+                   'busy': {'columns': ['Classroom', 'Date', 'StartTime', 'EndTime'], 'rows': [list(b) for b in sorted(busy)]}}
             os.makedirs(OUT_DIR, exist_ok=True)
             for fname in (name, 'timetable.json'):     # timetable.json: copy of the last save, for older tools
                 with open(os.path.join(OUT_DIR, fname), 'w', encoding='utf-8', newline='\n') as f:
@@ -423,11 +447,13 @@ def main():
             index = [e for e in index if e.get('file') != name]
             index.append({'file': name, 'semester': int(semester), 'academicYear': f'{year}/{year + 1}',
                           'label': label, 'units': list(units), 'firstDate': first, 'lastDate': last,
-                          'fetchedAt': fetched, 'classes': len(merged), 'unexpectedUnits': sum(bad_count.values())})
+                          'fetchedAt': fetched, 'classes': len(merged), 'roomBookings': len(busy),
+                          'unexpectedUnits': sum(bad_count.values())})
             index.sort(key=lambda e: (e['academicYear'], e['semester']))
             with open(index_path, 'w', encoding='utf-8', newline='\n') as f:
                 json.dump({'timetables': index}, f, ensure_ascii=False, indent=1)
-            report.append(f'- Saved `data/{name}` ({len(merged)} classes, {first} to {last}) and updated `data/index.json`')
+            report.append(f'- Saved `data/{name}` ({len(merged)} classes and {len(busy)} other room bookings, '
+                          f'{first} to {last}) and updated `data/index.json`')
         report += ['', '**Check only: nothing was saved.**' if mode != 'save' else
                    '**Saved.** In 1–2 minutes the tools can load it with "Get timetable from Bullet".']
         code = 2 if bad else 0                         # 2 = saved, but some classes have a wrong Unit (alert)

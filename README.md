@@ -33,7 +33,9 @@ can move to it later and drop their own copies of the fetch.
   "columns": ["ModuleName", "ModuleAcronym", "ModuleCode", "SectionName", "Typology", "StudentGroup",
               "Unit", "Classroom", "WeekdayName", "StartTime", "EndTime", "Week", "EventType", "Professor"],
   "rows": [["Finance I", "Finance I", "L15.2028", "T1", "T", "Y2_LIC_GEST", "S1", "Classroom 514",
-            "Tuesday", "09:30", "11:00", "2026-09-14,2026-09-21,…", "Aula Licenciatura", "P-7K3QM"], …]
+            "Tuesday", "09:30", "11:00", "2026-09-14,2026-09-21,…", "Aula Licenciatura", "P-7K3QM"], …],
+  "busy": {"columns": ["Classroom", "Date", "StartTime", "EndTime"],
+           "rows": [["Auditorium 511", "2026-10-15", "09:00", "17:00"], …]}
 }
 ```
 
@@ -49,6 +51,10 @@ can move to it later and drop their own copies of the fetch.
   Bullet (postgraduate programmes such as PGGL or MGA, exams, thesis defences, room bookings…) are
   not used and raise no alert. The summary lists them, undergraduate ones first, so they can be
   linked to their course or given the right event type in Bullet.
+- **Other room bookings** (`busy`): every other Bullet event in the semester's dates that has a
+  room (room reservations, Executive Education, MBA, exams, events, classes with no course, a wrong
+  Unit or of the other semester) as room, date, start and end only. The tools count those rooms as
+  busy, so a make-up class is not proposed in a room that is already booked.
 
 ## Privacy
 
@@ -58,6 +64,7 @@ The repository and the file are public, so:
   they change on every fetch. Within one file the same person always has the same code, which is
   enough to check whether a professor is free.
 - No student data, no staff e-mails or usernames, no free-text annotations.
+- Other room bookings carry no title, event type or people: only room, date and times.
 - The run's summary on GitHub shows counts and field names only.
 - Coded data still counts as personal data under the GDPR (pseudonymised): anyone who knows who
   teaches a class can recognise that person's code. Confirm with data protection before going live.
