@@ -1,11 +1,18 @@
 # Bullet timetable (shared fetch)
 
 One fetch from Bullet's API for every tool that needs the timetable. A GitHub task reads Bullet
-(the API can't be called from a browser), saves a clean copy in `data/timetable.json`, and GitHub
-Pages publishes it. Each tool then loads it with **Get timetable from Bullet**, and keeps the
-Bullet CSV upload as a fallback.
+(the API can't be called from a browser), saves a clean copy of **one semester per file**, and
+GitHub Pages publishes them. Each tool then loads the semester in use with **Get timetable from
+Bullet**, and keeps the Bullet CSV upload as a fallback.
 
-Published file: `https://catolica-lisbon-sbe.github.io/bullet-timetable/data/timetable.json`
+Published files (`https://catolica-lisbon-sbe.github.io/bullet-timetable/data/…`):
+- `index.json`: the list of saved semesters (file, semester, academic year, Units, first and last
+  date, number of classes, fetch time, number of classes left out for a wrong Unit).
+- `timetable-2026-27-S1.json`, `timetable-2026-27-S2.json`, …: one per semester and academic year.
+  Saving one semester never replaces another.
+- `timetable.json`: a copy of the last save, for older copies of the tools.
+
+Tools pick the semester in progress, or the next one; if all have ended, the most recent.
 
 Used by: Make-up Classes (Aulas de Reposição). Room Allocation Check and Student Schedule Sandbox
 can move to it later and drop their own copies of the fetch.
@@ -18,6 +25,10 @@ can move to it later and drop their own copies of the fetch.
   "fetchedAt": "2026-11-18T10:32:00Z",
   "semester": 1,
   "academicYear": "2026/2027",
+  "units": ["S1", "T1", "T2"],
+  "firstDate": "2026-08-31",
+  "lastDate": "2026-12-20",
+  "unexpectedUnits": {},
   "professors": "coded (new codes on every fetch)",
   "columns": ["ModuleName", "ModuleAcronym", "ModuleCode", "SectionName", "Typology", "StudentGroup",
               "Unit", "Classroom", "WeekdayName", "StartTime", "EndTime", "Week", "EventType", "Professor"],
@@ -29,6 +40,11 @@ can move to it later and drop their own copies of the fetch.
 - Same column names as Bullet's *Export Events* CSV, so tools read it like an export.
 - `Week`: the Mondays of the weeks the class runs.
 - Undergraduate (*Aula Licenciatura*) and Master (*Aula Mestrado*) classes of one semester.
+- **Units**: semester 1 keeps S1, T1, T2; semester 2 keeps S2, T3, T4. Classes of the other
+  semester are skipped quietly (the date windows overlap in January–February). Any other Unit
+  (empty, "T 3"…) is a mistake in Bullet: those classes are left out, counted in
+  `unexpectedUnits`, and listed by course, shift and time under a ⚠ heading in the run's summary.
+  The tools show the same warning. Fix the Unit in Bullet and save again.
 
 ## Privacy
 
@@ -59,7 +75,8 @@ Semester 1 2026/27.
 ## Fetching
 
 *Actions › Fetch timetable from Bullet › Run workflow*:
-- **semester** 1 or 2, **academic year** (empty = current; switches on 1 May),
+- **semester** 1 or 2, **academic year** (empty = current; switches on 1 May, so in May–July
+  empty already means the next academic year: type it, e.g. `2026`, to fetch the current one),
 - **mode** `check` first (summary only), then `save`.
 
 Professors come from Bullet's `teacherName` field (confirmed on the first `check`: 836 of 838
@@ -75,7 +92,9 @@ the summary lists Bullet's staff-like field names: add the right one to `PROFESS
 |---|---|
 | `scripts/fetch_timetable.py` | The fetch (Python standard library only). |
 | `.github/workflows/fetch-timetable.yml` | The GitHub task that runs it, by hand. |
-| `data/timetable.json` | The latest fetch (written by the task; not edited by hand). |
+| `data/index.json` | The list of saved semesters (written by the task; not edited by hand). |
+| `data/timetable-YYYY-YY-S1.json`, `-S2.json` | One file per semester (written by the task). |
+| `data/timetable.json` | Copy of the last save, for older copies of the tools. |
 
 ## Testing without Bullet
 

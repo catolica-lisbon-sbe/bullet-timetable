@@ -3,9 +3,14 @@ Bullet timetable – one shared fetch for every tool (run by GitHub, see
 .github/workflows/fetch-timetable.yml). Adapted from Room Allocation Check's fetch task.
 
 Downloads one semester of classes (Undergraduate "Aula Licenciatura" and Master
-"Aula Mestrado"), keeps only the columns the tools use and saves them in
-data/timetable.json, published by GitHub Pages so the tools can load it with
-"Get timetable from Bullet".
+"Aula Mestrado"), keeps only the columns the tools use and saves them in one file per
+semester, data/timetable-2026-27-S1.json (published by GitHub Pages), listed in
+data/index.json so the tools can pick the semester in use with "Get timetable from Bullet".
+data/timetable.json is also written (a copy of the last save) for older copies of the tools.
+
+Units: semester 1 = S1, T1, T2; semester 2 = S2, T3, T4. Classes of the other semester are
+skipped quietly (the date windows overlap in January and February); any other Unit (empty,
+misspelt…) is a mistake in Bullet: the classes are left out and listed with a ⚠ warning.
 
 Privacy (the repository and the file are public):
   - Professors are replaced by codes (e.g. P-7K3QM). A code is an HMAC of the name with a
@@ -21,7 +26,7 @@ Python standard library only. Settings come from environment variables:
   SEMESTER        1 (Units S1, T1, T2) or 2 (Units S2, T3, T4)
   ACADEMIC_YEAR   first year of the academic year, e.g. 2026 for 2026/27 (empty = current)
   MODE            "check" (report only, saves nothing) or "save"
-  OUT_DIR         where to save timetable.json (default: data/ next to this script's folder)
+  OUT_DIR         where to save the files (default: data/ next to this script's folder)
 """
 import base64
 import datetime as dt
@@ -315,22 +320,40 @@ def main():
             raise Stop('Bullet returned no classes for these dates.')
 
         units, coder = UNITS[semester], Coder()
-        rows, other_types, other_units = [], [], []
+        other_sem = UNITS['2' if semester == '1' else '1']
+        rows, other_types, other_sem_rows, bad_units = [], [], [], []
         for raw in raw_rows:
             level = level_of(raw)
             if not level:
                 other_types.append(pick(raw, ['eventTypeName']))
                 continue
             row = convert(raw, level, coder)
-            if row['Unit'].upper() not in units:
-                other_units.append(row['Unit'])
+            unit = row['Unit'].strip().upper()
+            if unit in other_sem:                      # the other semester's classes (overlapping dates)
+                other_sem_rows.append(unit)
                 continue
+            if unit not in units:                      # a mistake in Bullet: wrong or empty Unit
+                bad_units.append(row)
+                continue
+            row['Unit'] = unit
             rows.append(row)
 
         report.append(f'- Skipped, not "Aula Licenciatura" / "Aula Mestrado": {len(other_types)}'
                       + (f' – {counted(other_types)}' if other_types else ''))
-        report.append(f'- Skipped, Unit not {"/".join(units)}: {len(other_units)}'
-                      + (f' – {counted(other_units)}' if other_units else ''))
+        report.append(f'- Skipped, classes of the other semester ({"/".join(other_sem)}): {len(other_sem_rows)}')
+        bad = merge_weeks(bad_units) if bad_units else []
+        bad_count = {}
+        for r in bad:
+            bad_count[r['Unit'] or '(empty)'] = bad_count.get(r['Unit'] or '(empty)', 0) + 1
+        if bad:
+            report += ['', f'### ⚠ {len(bad)} classes left out: Unit is not {"/".join(units)}',
+                       f'- Units found: {", ".join(f"{k} ({v})" for k, v in sorted(bad_count.items()))}',
+                       '- Fix the Unit of these classes in Bullet, then run this again:']
+            for r in sorted(bad, key=lambda r: (r['ModuleName'], r['SectionName']))[:30]:
+                report.append(f"  - {r['ModuleName']} ({r['ModuleCode']}) – {r['SectionName'] or '–'} · "
+                              f"{r['WeekdayName']} {r['StartTime']} · Unit: {r['Unit'] or '(empty)'}")
+            if len(bad) > 30:
+                report.append(f'  - … and {len(bad) - 30} more')
         fetched = dt.datetime.now(dt.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
         merged = merge_weeks(rows)
         with_prof = sum(1 for r in merged if r['Professor'])
@@ -352,15 +375,33 @@ def main():
                           'PROFESSOR_FIELDS in scripts/fetch_timetable.py.')
         if not merged:
             raise Stop('No Undergraduate or Master classes of this semester were found.')
+        mondays = sorted({w for r in merged for w in r['Week'].split(',') if w})
+        first = mondays[0] if mondays else ''
+        last = (dt.date.fromisoformat(mondays[-1]) + dt.timedelta(days=6)).isoformat() if mondays else ''
         if mode == 'save':
+            name = f'timetable-{year}-{str(year + 1)[2:]}-S{semester}.json'
             out = {'source': f'Bullet API · {label}', 'fetchedAt': fetched, 'semester': int(semester),
-                   'academicYear': f'{year}/{year + 1}', 'professors': 'coded (new codes on every fetch)',
+                   'academicYear': f'{year}/{year + 1}', 'units': list(units), 'firstDate': first, 'lastDate': last,
+                   'unexpectedUnits': bad_count, 'professors': 'coded (new codes on every fetch)',
                    'columns': COLUMNS, 'rows': [[r[c] for c in COLUMNS] for r in merged]}
             os.makedirs(OUT_DIR, exist_ok=True)
-            path = os.path.join(OUT_DIR, 'timetable.json')
-            with open(path, 'w', encoding='utf-8', newline='\n') as f:
-                json.dump(out, f, ensure_ascii=False, separators=(',', ':'))
-            report.append(f'- Saved `data/timetable.json` ({len(merged)} classes)')
+            for fname in (name, 'timetable.json'):     # timetable.json: copy of the last save, for older tools
+                with open(os.path.join(OUT_DIR, fname), 'w', encoding='utf-8', newline='\n') as f:
+                    json.dump(out, f, ensure_ascii=False, separators=(',', ':'))
+            index_path = os.path.join(OUT_DIR, 'index.json')
+            try:
+                with open(index_path, encoding='utf-8') as f:
+                    index = json.load(f).get('timetables', [])
+            except (OSError, ValueError):
+                index = []
+            index = [e for e in index if e.get('file') != name]
+            index.append({'file': name, 'semester': int(semester), 'academicYear': f'{year}/{year + 1}',
+                          'label': label, 'units': list(units), 'firstDate': first, 'lastDate': last,
+                          'fetchedAt': fetched, 'classes': len(merged), 'unexpectedUnits': sum(bad_count.values())})
+            index.sort(key=lambda e: (e['academicYear'], e['semester']))
+            with open(index_path, 'w', encoding='utf-8', newline='\n') as f:
+                json.dump({'timetables': index}, f, ensure_ascii=False, indent=1)
+            report.append(f'- Saved `data/{name}` ({len(merged)} classes, {first} to {last}) and updated `data/index.json`')
         report += ['', '**Check only: nothing was saved.**' if mode != 'save' else
                    '**Saved.** In 1–2 minutes the tools can load it with "Get timetable from Bullet".']
         code = 0

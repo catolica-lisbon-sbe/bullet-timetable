@@ -1,6 +1,6 @@
 # Fetch the timetable from Bullet's API (scripts/fetch_timetable.py) for every tool.
 # Started by hand: GitHub → Actions → "Fetch timetable from Bullet" → Run workflow.
-# Mode "check" only reports; mode "save" commits data/timetable.json, published by GitHub Pages.
+# Mode "check" only reports; mode "save" commits the semester's file and data/index.json, published by GitHub Pages.
 # The Bullet ID and secret are secrets (BULLET_CLIENT_ID, BULLET_CLIENT_SECRET): repository
 # secrets, or organization secrets shared with this repository.
 name: Fetch timetable from Bullet
