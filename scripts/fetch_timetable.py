@@ -26,6 +26,8 @@ Python standard library only. Settings come from environment variables:
   SEMESTER        1 (Units S1, T1, T2) or 2 (Units S2, T3, T4)
   ACADEMIC_YEAR   first year of the academic year, e.g. 2026 for 2026/27 (empty = current)
   MODE            "check" (report only, saves nothing) or "save"
+  AUTO            1 in the weekly run: a semester not yet in Bullet is not an error
+  Exit code: 0 = done, 1 = error, 2 = done but some classes have a wrong Unit (alert)
   OUT_DIR         where to save the files (default: data/ next to this script's folder)
 """
 import base64
@@ -45,6 +47,8 @@ import urllib.request
 TOKEN_URL = os.environ.get('BULLET_TOKEN_URL') or 'https://clsbe-is.bulletscheduling.com/connect/token'
 API_URL = os.environ.get('BULLET_API_URL') or 'https://clsbe-api.bulletscheduling.com'   # overridable for local tests
 SCOPE = 'bestlegacy_api_scope'
+AUTO = os.environ.get('AUTO', '') == '1'          # weekly scheduled run
+NOT_YET = ('Bullet returned no classes for these dates.', 'No Undergraduate or Master classes of this semester were found.')
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT_DIR = os.environ.get('OUT_DIR') or os.path.join(ROOT, 'data')
 
@@ -404,10 +408,16 @@ def main():
             report.append(f'- Saved `data/{name}` ({len(merged)} classes, {first} to {last}) and updated `data/index.json`')
         report += ['', '**Check only: nothing was saved.**' if mode != 'save' else
                    '**Saved.** In 1–2 minutes the tools can load it with "Get timetable from Bullet".']
-        code = 0
+        code = 2 if bad else 0                         # 2 = saved, but some classes have a wrong Unit (alert)
+        if bad:
+            report.append(f'**⚠ {len(bad)} classes have a wrong Unit in Bullet (see above).**')
     except Stop as err:
-        report += ['', f'**✕ {err}**']
-        code = 1
+        if AUTO and str(err) in NOT_YET:               # weekly run: this semester is not in Bullet yet
+            report += ['', f'**Nothing to save yet:** {err}']
+            code = 0
+        else:
+            report += ['', f'**✕ {err}**']
+            code = 1
 
     text = '\n'.join(report) + '\n'
     sys.stdout.reconfigure(encoding='utf-8')

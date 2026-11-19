@@ -1,11 +1,18 @@
 # Fetch the timetable from Bullet's API (scripts/fetch_timetable.py) for every tool.
-# Started by hand: GitHub → Actions → "Fetch timetable from Bullet" → Run workflow.
+# Runs by itself every Monday at 04:00 UTC (04:00 in Lisbon in winter, 05:00 in summer): it saves
+# both semesters of the current academic year (the year switches on 1 May). A semester not yet in
+# Bullet is skipped without an error.
+# Can also be started by hand: GitHub → Actions → "Fetch timetable from Bullet" → Run workflow.
 # Mode "check" only reports; mode "save" commits the semester's file and data/index.json, published by GitHub Pages.
+# The run ends with ❌ (and GitHub e-mails the account that set the schedule) if Bullet can't be read
+# or if some classes have a wrong Unit (the timetable is still saved; the summary lists them).
 # The Bullet ID and secret are secrets (BULLET_CLIENT_ID, BULLET_CLIENT_SECRET): repository
 # secrets, or organization secrets shared with this repository.
 name: Fetch timetable from Bullet
 
 on:
+  schedule:
+    - cron: '0 4 * * 1'          # every Monday, 04:00 UTC
   workflow_dispatch:
     inputs:
       semester:
@@ -33,21 +40,38 @@ concurrency:
 jobs:
   fetch:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
       - name: Fetch from Bullet
+        id: fetch
         env:
           BULLET_CLIENT_ID: ${{ secrets.BULLET_CLIENT_ID }}
           BULLET_CLIENT_SECRET: ${{ secrets.BULLET_CLIENT_SECRET }}
-          SEMESTER: ${{ inputs.semester }}
           ACADEMIC_YEAR: ${{ inputs.academic_year }}
-          MODE: ${{ inputs.mode }}
-        run: python3 scripts/fetch_timetable.py
+          WEEKLY: ${{ github.event_name == 'schedule' }}
+          INPUT_SEMESTER: ${{ inputs.semester }}
+          INPUT_MODE: ${{ inputs.mode }}
+        run: |
+          # exit codes of the script: 0 = done, 1 = error, 2 = done but some classes have a wrong Unit
+          error=0; alert=0
+          if [ "$WEEKLY" = "true" ]; then
+            semesters="1 2"; export MODE=save AUTO=1
+          else
+            semesters="$INPUT_SEMESTER"; export MODE="$INPUT_MODE"
+          fi
+          for s in $semesters; do
+            set +e; SEMESTER=$s python3 scripts/fetch_timetable.py; code=$?; set -e
+            [ $code -eq 1 ] && error=1
+            [ $code -eq 2 ] && alert=1
+          done
+          echo "alert=$alert" >> "$GITHUB_OUTPUT"
+          echo "error=$error" >> "$GITHUB_OUTPUT"
+          echo "save=$MODE" >> "$GITHUB_OUTPUT"
 
       - name: Save the fetch
-        if: inputs.mode == 'save'
+        if: steps.fetch.outputs.save == 'save'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -55,7 +79,18 @@ jobs:
           if git diff --cached --quiet; then
             echo "Nothing changed since the last fetch."
           else
-            git commit -m "Fetch Bullet timetable: semester ${{ inputs.semester }}"
+            git commit -m "Fetch Bullet timetable (${{ github.event_name == 'schedule' && 'weekly' || format('semester {0}', inputs.semester) }})"
             git pull --rebase origin "${GITHUB_REF_NAME}"
             git push
           fi
+
+      - name: Alert
+        if: steps.fetch.outputs.error == '1' || steps.fetch.outputs.alert == '1'
+        run: |
+          if [ "${{ steps.fetch.outputs.error }}" = "1" ]; then
+            echo "::error::Bullet could not be read for at least one semester. See the run's summary."
+          fi
+          if [ "${{ steps.fetch.outputs.alert }}" = "1" ]; then
+            echo "::error::Some classes have a wrong Unit in Bullet and were left out. The timetable was saved; the summary lists the classes to fix."
+          fi
+          exit 1

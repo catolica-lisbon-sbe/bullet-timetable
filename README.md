@@ -74,7 +74,16 @@ Semester 1 2026/27.
 
 ## Fetching
 
-*Actions › Fetch timetable from Bullet › Run workflow*:
+**Every Monday at 04:00 UTC** (04:00 in Lisbon in winter, 05:00 in summer; GitHub may start it a
+little late) the task runs by itself and saves **both semesters** of the current academic year
+(the year switches on 1 May, so from May to July it already prepares the next year). A semester
+not yet in Bullet is skipped without an error. The run ends with ❌, and GitHub e-mails the account
+that set the schedule (RitaQuintela), when Bullet can't be read or when some classes have a wrong
+Unit; in the second case the timetable is still saved and the summary lists the classes to fix.
+Each run makes a commit (professor codes change on every fetch), which also keeps the schedule
+active: GitHub turns off schedules in repositories with no activity for 60 days.
+
+By hand, for an update straight away: *Actions › Fetch timetable from Bullet › Run workflow*:
 - **semester** 1 or 2, **academic year** (empty = current; switches on 1 May, so in May–July
   empty already means the next academic year: type it, e.g. `2026`, to fetch the current one),
 - **mode** `check` first (summary only), then `save`.
