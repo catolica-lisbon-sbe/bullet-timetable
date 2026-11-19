@@ -1,0 +1,20 @@
+{
+ "timetables": [
+  {
+   "file": "timetable-2026-27-S1.json",
+   "semester": 1,
+   "academicYear": "2026/2027",
+   "label": "Semester 1 2026/27",
+   "units": [
+    "S1",
+    "T1",
+    "T2"
+   ],
+   "firstDate": "2026-08-31",
+   "lastDate": "2026-12-13",
+   "fetchedAt": "2026-11-19T09:29:58Z",
+   "classes": 838,
+   "unexpectedUnits": 69
+  }
+ ]
+}
