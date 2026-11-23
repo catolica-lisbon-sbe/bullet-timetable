@@ -41,7 +41,8 @@ can move to it later and drop their own copies of the fetch.
 
 - Same column names as Bullet's *Export Events* CSV, so tools read it like an export.
 - `Week`: the Mondays of the weeks the class runs.
-- Undergraduate (*Aula Licenciatura*) and Master (*Aula Mestrado*) classes of one semester.
+- Undergraduate (*Aula Licenciatura*) and Master (*Aula Mestrado*) classes of one semester. The event
+  type must match exactly: *Aula Mestrado Executivo* (Executive Masters) only blocks the room.
 - **Units**: semester 1 keeps S1, T1, T2; semester 2 keeps S2, T3, T4. Classes of the other
   semester are skipped quietly (the date windows overlap in January–February). Any other Unit
   (empty, "T 3"…) is a mistake in Bullet: those classes are left out, counted in

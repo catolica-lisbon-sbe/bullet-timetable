@@ -210,12 +210,16 @@ def to_time(v):
 
 
 def level_of(raw):
-    """'Aula Licenciatura', 'Aula Mestrado' or None, from the event type (EventType / EventTitle)."""
-    for text in (pick(raw, ['eventTypeName']), pick(raw, ['eventName'])):
-        for level in LEVELS:
-            if text.lower().startswith(level.lower()):
-                return level
-    return None
+    """'Aula Licenciatura', 'Aula Mestrado' or None. The event type must be exactly one of LEVELS:
+    "Aula Mestrado Executivo" (Executive Masters) is another type, only a room booking for the tools.
+    Only when an event has no type is its title used (it must start with one of LEVELS)."""
+    typ = ' '.join(pick(raw, ['eventTypeName']).lower().split())
+    if typ:
+        return next((level for level in LEVELS if typ == level.lower()), None)
+    title = pick(raw, ['eventName']).lower()
+    if re.match(r'aula mestrado execut', ' '.join(title.split())):
+        return None
+    return next((level for level in LEVELS if title.startswith(level.lower())), None)
 
 
 # ---------- Professors → codes ----------
