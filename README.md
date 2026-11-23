@@ -51,6 +51,15 @@ can move to it later and drop their own copies of the fetch.
   Bullet (postgraduate programmes such as PGGL or MGA, exams, thesis defences, room bookings…) are
   not used and raise no alert. The summary lists them, undergraduate ones first, so they can be
   linked to their course or given the right event type in Bullet.
+- **Make-up classes**: events of type *Make-up class*, or whose title starts with
+  "Make-up Class:", are kept as classes on their date, so the tools count their students as busy.
+  The course comes from the Module field or, if it is empty, from the title
+  ("Make-up Class: Impact Investing", optionally followed by the shift, e.g. "TP1"). With a shift,
+  only that shift's students are counted; with no shift, all students of the course. A missing Unit
+  takes the course's Unit. Titles are only matched to a course name or code, never saved or
+  printed. Make-up classes whose course is not found are listed in the summary (room and time
+  only) and still block the room.
+- **Several rooms** in one event ("Auditorium 511,Classroom 513") are all counted as busy.
 - **Other room bookings** (`busy`): every other Bullet event in the semester's dates that has a
   room (room reservations, Executive Education, MBA, exams, events, classes with no course, a wrong
   Unit or of the other semester) as room, date, start and end only. The tools count those rooms as

@@ -54,6 +54,7 @@ OUT_DIR = os.environ.get('OUT_DIR') or os.path.join(ROOT, 'data')
 
 UNITS = {'1': ('S1', 'T1', 'T2'), '2': ('S2', 'T3', 'T4')}
 LEVELS = ['Aula Licenciatura', 'Aula Mestrado']   # event types kept
+MAKEUP = 'Make-up class'                          # event type of make-up classes (also: title "Make-up Class: <course>")
 WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 
 # Column of the shared file <- Bullet API field(s), first non-empty one wins.
@@ -282,7 +283,40 @@ def booking(raw):
     start, end = to_time(pick(raw, ['eventStartTime'])), to_time(pick(raw, ['eventEndTime']))
     if not room or not day or not re.match(r'\d\d:\d\d$', start) or not re.match(r'\d\d:\d\d$', end) or end <= start:
         return []
-    return [(r.strip(), day.isoformat(), start, end) for r in re.split(r'[;|]', room) if r.strip()]
+    return [(r.strip(), day.isoformat(), start, end) for r in re.split(r'[;|,]', room) if r.strip()]
+
+
+# ---------- Make-up classes ----------
+def norm(text):
+    """Lower case, no accents, only letters and digits: 'Impact  Investing' == 'impact investing'."""
+    t = unicodedata.normalize('NFKD', text or '').encode('ascii', 'ignore').decode().lower()
+    return ' '.join(re.sub(r'[^a-z0-9]+', ' ', t).split())
+
+
+MAKEUP_TITLE = re.compile(r'\s*(?:make[\s-]*up(?:\s+class)?|reposi[cç][aã]o)\s*[:\-–]\s*(.*)$', re.I)
+
+
+def is_makeup(raw):
+    """Event type "Make-up class", or a title that starts with "Make-up Class:" (or "Reposição:")."""
+    return norm(pick(raw, ['eventTypeName'])) == norm(MAKEUP) or bool(MAKEUP_TITLE.match(pick(raw, ['eventName', 'eventTitle'])))
+
+
+def course_from_title(title, courses):
+    """(course, shift) named in a make-up title, e.g. "Make-up Class: Impact Investing TP1".
+    Only the course name or code and the shift are read; the title itself is never saved or printed."""
+    m = MAKEUP_TITLE.match(title or '')
+    rest = norm(m[1] if m else title)
+    best = None
+    for c in courses.values():
+        for key in (c['nk'], c['ck']):
+            if key and (rest == key or rest.startswith(key + ' ')) and (not best or len(key) > len(best[1])):
+                best = (c, key)
+    if not best:
+        return None, ''
+    c, key = best
+    left = rest[len(key):].strip()
+    shift = next((sec for sec in c['sections'] if left and (left == norm(sec) or left.startswith(norm(sec) + ' '))), '')
+    return c, shift
 
 
 def merge_weeks(rows):
@@ -336,6 +370,7 @@ def main():
         units, coder = UNITS[semester], Coder()
         other_sem = UNITS['2' if semester == '1' else '1']
         rows, other_types, other_sem_rows, bad_units, no_course = [], [], [], [], []
+        makeups = []                                   # make-up classes: matched to a course after the classes are read
         busy, busy_types = set(), []                   # rooms taken by everything that is not a class used by the tools
         def taken(raw, kind):
             b = booking(raw)
@@ -343,6 +378,9 @@ def main():
                 busy.update(b)
                 busy_types.append(kind)
         for raw in raw_rows:
+            if is_makeup(raw):
+                makeups.append(raw)
+                continue
             level = level_of(raw)
             if not level:
                 other_types.append(pick(raw, ['eventTypeName']))
@@ -364,6 +402,44 @@ def main():
                 continue
             row['Unit'] = unit
             rows.append(row)
+
+        # Make-up classes: a class on one date for the students of a course (and shift). The course comes
+        # from the Module field or, if it is empty, from the title ("Make-up Class: Impact Investing").
+        # No shift in Bullet → all shifts of the course (the tools count all its students).
+        courses = {}
+        for r in rows:
+            c = courses.setdefault(norm(r['ModuleCode']) or norm(r['ModuleName']), {
+                'name': r['ModuleName'], 'acr': r['ModuleAcronym'], 'code': r['ModuleCode'],
+                'nk': norm(r['ModuleName']), 'ck': norm(r['ModuleCode']), 'units': set(), 'sections': set()})
+            c['units'].add(r['Unit'])
+            if r['SectionName']:
+                c['sections'].add(r['SectionName'])
+        mk_rows, mk_exact, mk_course, mk_missed = [], 0, 0, []
+        for raw in makeups:
+            row = convert(raw, MAKEUP, coder)
+            c = None
+            if row['ModuleCode'] or row['ModuleName']:
+                c = courses.get(norm(row['ModuleCode'])) or next((x for x in courses.values() if x['nk'] == norm(row['ModuleName'])), None)
+            else:
+                c, shift = course_from_title(pick(raw, ['eventName', 'eventTitle']), courses)
+                if c:
+                    row.update(ModuleName=c['name'], ModuleAcronym=c['acr'], ModuleCode=c['code'], SectionName=shift)
+            unit = row['Unit'].strip().upper()
+            if unit in other_sem:
+                taken(raw, f'{MAKEUP} (other semester)')
+                continue
+            use = [unit] if unit in units else sorted(c['units']) if c else []
+            if not (row['ModuleName'] or row['ModuleCode']) or not use:
+                mk_missed.append(row)
+                taken(raw, f'{MAKEUP} (course not found)')
+                continue
+            for u in use:
+                mk_rows.append(dict(row, Unit=u))
+            if row['SectionName']:
+                mk_exact += 1
+            else:
+                mk_course += 1
+        rows += mk_rows
 
         report.append(f'- Skipped, not "Aula Licenciatura" / "Aula Mestrado": {len(other_types)}'
                       + (f' – {counted(other_types)}' if other_types else ''))
@@ -402,6 +478,15 @@ def main():
             report += [line(r, 'no course') for r in items[:200]]
             if len(items) > 200:
                 report.append(f'  - … and {len(items) - 200} more')
+        if makeups:
+            report += ['', '### Make-up classes',
+                       f'- Found: {len(makeups)} (event type "{MAKEUP}", or a title starting with "Make-up Class:")',
+                       f'- Used for students: {mk_exact + mk_course} – with the shift: {mk_exact}; '
+                       f'all shifts of the course (no shift in Bullet): {mk_course}']
+            if mk_missed:
+                report += [f'- ⚠ Course not found, only the room is shown as busy: {len(mk_missed)}. In Bullet, fill in '
+                           'the Module (and Section name), or start the title with "Make-up Class: " and the exact course name:']
+                report += [line(r, 'make-up') for r in mk_missed[:100]]
         fetched = dt.datetime.now(dt.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
         merged = merge_weeks(rows)
         with_prof = sum(1 for r in merged if r['Professor'])
