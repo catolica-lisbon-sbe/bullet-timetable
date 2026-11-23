@@ -350,7 +350,7 @@ def main():
                 continue
             row = convert(raw, level, coder)
             if not row['ModuleName'] and not row['ModuleCode']:   # typed as a class, but no course in Bullet
-                no_course.append(dict(row, _title=pick(raw, ['eventName', 'eventTitle'])))
+                no_course.append(row)              # titles are free text (may name people): never printed
                 taken(raw, f'{level} (no course)')
                 continue
             unit = row['Unit'].strip().upper()
@@ -386,18 +386,20 @@ def main():
                 report.append(f'  - … and {len(bad) - 200} more')
         if no_course:                                  # not an alert: listed so they can be tidied up in Bullet
             nc = {}
-            for r in no_course:                        # one line per title, room and time (weeks merged)
-                k = (r['_title'], r['EventType'], r['Classroom'], r['WeekdayName'], r['StartTime'], r['EndTime'])
+            for r in no_course:                        # one line per type, room and time (weeks merged)
+                k = (r['EventType'], r['Classroom'], r['WeekdayName'], r['StartTime'], r['EndTime'])
                 nc.setdefault(k, dict(r, _weeks=set()))['_weeks'].add(r['Week'])
             items = []
             for r in nc.values():
                 r['Week'] = ','.join(sorted(r.pop('_weeks') - {''}))
                 items.append(r)
-            items.sort(key=lambda r: (r['EventType'] != 'Aula Licenciatura', r['_title'], r['Week']))
+            items.sort(key=lambda r: (r['EventType'] != 'Aula Licenciatura', r['Classroom'], r['WeekdayName'], r['StartTime'], r['Week']))
             report += ['', f'### {len(items)} entries typed as a class but with no course in Bullet (not used, no alert)',
                        '- No student can be matched to them. Undergraduate ones (first) should be linked to their '
-                       'course, shift and Unit in Bullet; the others are usually postgraduate programmes, exams or room bookings.']
-            report += [line(r, f"“{r['_title'] or '–'}”") for r in items[:200]]
+                       'course, shift and Unit in Bullet; the others are usually postgraduate programmes, exams or room bookings.',
+                       '- Titles are not shown, because this summary can be read by anyone signed in to GitHub. '
+                       'Find each entry in Bullet by its room, day and time.']
+            report += [line(r, 'no course') for r in items[:200]]
             if len(items) > 200:
                 report.append(f'  - … and {len(items) - 200} more')
         fetched = dt.datetime.now(dt.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
