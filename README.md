@@ -95,7 +95,7 @@ Semester 1 2026/27.
 
 ## Fetching
 
-**Every Monday at 04:00 UTC** (04:00 in Lisbon in winter, 05:00 in summer; GitHub may start it a
+**Every day at 04:00 UTC** (04:00 in Lisbon in winter, 05:00 in summer; GitHub may start it a
 little late) the task runs by itself and saves **both semesters** of the current academic year
 (the year switches on 1 May, so from May to July it already prepares the next year). A semester
 not yet in Bullet is skipped without an error. The run ends with ❌, and GitHub e-mails the account
