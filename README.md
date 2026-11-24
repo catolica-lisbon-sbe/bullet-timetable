@@ -1,4 +1,4 @@
-# Bullet timetable (shared fetch)
+# Bullet Timetable Fetcher
 
 One fetch from Bullet's API for every tool that needs the timetable. A GitHub task reads Bullet
 (the API can't be called from a browser), saves a clean copy of **one semester per file**, and
