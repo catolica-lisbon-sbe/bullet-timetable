@@ -14,8 +14,13 @@ Published files (`https://catolica-lisbon-sbe.github.io/bullet-timetable/data/�
 
 Tools pick the semester in progress, or the next one; if all have ended, the most recent.
 
-Used by: Make-up Classes (Aulas de Reposição). Room Allocation Check and Student Schedule Sandbox
-can move to it later and drop their own copies of the fetch.
+Used by:
+- **Make-up Classes** (Aulas de Reposição).
+- **Room Allocation Check** (since 25/11/2026; its own fetch was removed). It checks the
+  undergraduate and Master classes. Make-up classes and `busy` are not checked there, but their
+  rooms are never suggested as free.
+
+Student Schedule Sandbox can move to it later and drop its own copy of the fetch.
 
 ## What the file contains
 
